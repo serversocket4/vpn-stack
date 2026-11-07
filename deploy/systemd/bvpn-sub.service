@@ -1,0 +1,29 @@
+[Unit]
+Description=VPN subscriptions behind Caddy (page for browsers, links for apps)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -I /usr/local/lib/bvpn/vpnsub.py
+Restart=always
+RestartSec=3
+DynamicUser=yes
+SupplementaryGroups=caddy
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bvpn-checks
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryMax=128M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

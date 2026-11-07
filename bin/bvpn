@@ -1,0 +1,474 @@
+#!/usr/bin/env bash
+# bvpn - the only thing the server chat may run as root on a VPN server (sudoers allows
+# exactly this file). Installed to /usr/local/sbin/bvpn by scripts/vpnops-install.sh.
+# Never prints UUIDs, Reality keys, shortIds, XHTTP path, passwords or proxy secrets.
+#
+#   bvpn status                 services, versions, ports, disk, self-check result
+#   bvpn show                   config shape: inbounds, SNI, client names, routing (no secrets)
+#   bvpn test                   xray -test of the live config
+#   bvpn journal UNIT [MIN]     warnings of xray|hysteria-server|telemt for MIN minutes (60)
+#   bvpn restart UNIT           restart xray|hysteria-server|telemt, then check it is up
+#   bvpn xray-patch             jq filter on stdin -> candidate config -> test -> backup ->
+#                                     replace -> restart -> check; any failure restores the backup
+#   bvpn snapshot [--probe IP]  JSON for the admin panel, no secrets (vpnlib.py snapshot)
+#   bvpn selftest               temporary clients through every channel, exit IP check
+#   bvpn selftest --via IP      the same through a relay forwarding this server's ports (Russian chain)
+#   bvpn linkcheck              stdin: links of a subscription; exit 0 only if each matches the live
+#                                     configs (address, port, key, SNI, shortId, path, password); no values printed
+#   bvpn apply ID KIND [SEC]    change with a dead man's switch: candidate -> guard -> test ->
+#                                     backup -> replace -> restart -> selftest; then the change
+#                                     waits SEC seconds (60..900, default 300) for `confirm ID`
+#                                     and reverts ITSELF if nobody confirms (VPN broken = owner
+#                                     cut off = nobody can confirm). KIND, stdin:
+#                                       xray               jq filter (no new public listeners,
+#                                                          clients and Reality keys untouched)
+#                                       hysteria-userpass  JSON {"users":{login:hex32},"stats":
+#                                                          {"listen":"127.0.0.1:P","secret":hex32}}
+#   bvpn confirm ID             keep the change
+#   bvpn revert ID              put the backup back now
+#   bvpn pending                changes waiting for confirmation
+#   bvpn person-add ID TEMPLATE [SEC]   stdin {"login","name"}: +1 person in Xray (both
+#                                     inbounds), Telemt and - with per-person passwords - Hysteria2,
+#                                     copying TEMPLATE's settings; one dead man's switch for all three.
+#                                     Prints "kit: OLDU NEWU OLDK NEWK OLDAUTH NEWAUTH" - the secrets the
+#                                     executor needs to build the kit from TEMPLATE's (vpnjob.py, root).
+#   bvpn person-remove ID LOGIN [SEC]   the same backwards (the template person is refused)
+#   bvpn person-pause ID LOGIN [SEC]    out of Xray, Telemt and Hysteria2 like person-remove, but the
+#                                     entries are kept in /etc/bvpn/paused/LOGIN.json (the template person refused)
+#   bvpn person-resume ID LOGIN [SEC]   puts the kept entries back: same keys, the links work again
+#   bvpn update ID xray|hysteria VERSION [SEC]   official release from GitHub (XTLS/Xray-core,
+#                                     HyNetworks/hysteria), SHA-256 checked against the published digest,
+#                                     the new binary must pass `-test` on the live config; old binary kept
+#                                     as <bin>.bak.<time>; restart, selftest, dead man's switch as apply
+#   bvpn ufw ID allow|delete PORT/PROTO [SEC]   one rule, never port 22; `ufw reload`, SSH still
+#                                     allowed, selftest; the switch puts user.rules/user6.rules back
+#
+# Restarts drop every connected client for a couple of seconds - the panel asks first.
+set -euo pipefail
+export LC_ALL=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+XCONF=/usr/local/etc/xray/config.json
+HCONF=/etc/hysteria/config.yaml
+LIB=/usr/local/lib/bvpn/vpnlib.py
+VAR=/var/lib/bvpn; PEND=$VAR/pending
+PAUSED=/etc/bvpn/paused          # person-pause keeps what it took out here (root 600), person-resume reads it
+UNITS="xray hysteria-server telemt"
+die() { echo "bvpn: $*" >&2; exit 1; }
+unit_ok() { case " $UNITS " in *" $1 "*) ;; *) die "unit must be one of: $UNITS" ;; esac; }
+log() { logger -t bvpn "${SUDO_USER:-root}: $*"; }
+
+# A config is written back with the owner and mode it has now (Xray may run as nobody or as xray).
+own() { stat -c %U:%G "$1"; }
+mod() { stat -c %a "$1"; }
+keep() { chown "$(own "$1")" "$2"; chmod "$(mod "$1")" "$2"; }   # live file, candidate
+xray_user() { local u; u="$(systemctl show -p User --value xray 2>/dev/null)"; echo "${u:-root}"; }
+xray_test() { runuser -u "$(xray_user)" -- xray run -test -config "$1" >/dev/null 2>&1; }
+lib() { python3 -I "$LIB" "$@"; }
+alert() { [ -x /usr/local/sbin/bvpn-alert ] && /usr/local/sbin/bvpn-alert --text "$*" >/dev/null 2>&1 || true; }
+id_ok() { [[ "${1:-}" =~ ^[a-z0-9-]{3,40}$ ]] || die "id: [a-z0-9-]{3,40}"; }
+
+# pending file: REVERT_AT=, UNIT=<units, for display> and one ENTRY=unit|conf|backup|owner|mode per file
+# (files written before ENTRY existed have single UNIT/CONF/BACKUP/OWNER/MODE lines)
+entries() {
+    if grep -q '^ENTRY=' "$1"; then sed -n 's/^ENTRY=//p' "$1"
+    else printf '%s|%s|%s|%s|%s\n' "$(sed -n 's/^UNIT=//p' "$1")" "$(sed -n 's/^CONF=//p' "$1")" \
+        "$(sed -n 's/^BACKUP=//p' "$1")" "$(sed -n 's/^OWNER=//p' "$1")" "$(sed -n 's/^MODE=//p' "$1")"; fi
+}
+put_back() {   # pending file -> every backup restored, every unit restarted and checked
+    local f="$1" u c b o m units="" ok=0
+    while IFS='|' read -r u c b o m; do
+        [ -s "$b" ] || die "backup $b is missing - fix by hand"
+        install -m "$m" -o "${o%:*}" -g "${o#*:}" "$b" "$c"
+        [ "$u" != - ] || continue                     # a file without a service: /etc/bvpn/people
+        case " $units " in *" $u "*) ;; *) units="$units $u" ;; esac
+    done < <(entries "$f")
+    for u in $units; do restart_unit "$u"; check_up "$u" || ok=1; done
+    return $ok
+}
+pending_write() {   # id secs entry... -> pending file
+    local id="$1" secs="$2" e units=""; shift 2
+    for e in "$@"; do [ "${e%%|*}" = - ] || units="$units ${e%%|*}"; done
+    { printf 'REVERT_AT=%s\nUNIT=%s\n' "$(( $(date +%s) + secs ))" "${units# }"; printf 'ENTRY=%s\n' "$@"; } > "$PEND/$id"
+}
+arm() {   # id secs: the dead man's switch, armed before any restart
+    systemd-run --quiet --unit="bvpn-revert-$1" --on-active="$2s" --timer-property=AccuracySec=1s \
+        /usr/local/sbin/bvpn revert "$1" --auto
+}
+settle() {   # id baseline units... -> restart, check, selftest against baseline; reverts all on failure
+    local id="$1" base="$2" u fail=""; shift 2
+    for u in "$@"; do restart_unit "$u"; check_up "$u" || fail="$u did not come up"; done
+    [ -n "$fail" ] || [ -z "${POSTCHECK:-}" ] || $POSTCHECK || fail="$POSTCHECK failed"
+    [ -n "$fail" ] || lib selftest --baseline "$base" >/dev/null 2>"$VAR/selftest-diff-$id" || fail="selftest: $(tr '\n' ' ' < "$VAR/selftest-diff-$id")"
+    rm -f "$base" "$VAR/selftest-diff-$id"
+    [ -n "$fail" ] || return 0
+    systemctl stop "bvpn-revert-$id.timer" 2>/dev/null || true
+    if put_back "$PEND/$id"; then rm -f "$PEND/$id"; log "$id: $fail - reverted"; die "$fail - backups restored, services are up"; fi
+    rm -f "$PEND/$id"; alert "VPN: правка $id не поднялась ни новой, ни с копией - нужен вход root"
+    die "$fail, and the restored backups did not come up either - SSH in as root now"
+}
+
+ssh_open() {   # the firewall is on and still lets SSH in
+    local st; st="$(ufw status 2>/dev/null || true)"
+    grep -q '^Status: active' <<< "$st" && grep -qE '^(22|22/tcp|OpenSSH)\s+(ALLOW|LIMIT)' <<< "$st"
+}
+restart_unit() {   # ufw is reloaded, never restarted: a restart drops every rule for a moment
+    if [ "$1" = ufw ]; then ufw reload >/dev/null; else systemctl restart "$1"; fi
+}
+check_up() {   # unit -> active and its ports are listening again
+    local u="$1" i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 1
+        [ "$(systemctl is-active "$u")" = active ] || continue
+        # ss output is read whole first: under pipefail `ss | grep -q` can fail when grep quits early
+        local t; t="$(ss -lnt)"; local u4; u4="$(ss -lnu)"
+        case "$u" in
+            xray) grep -qE ':2083\s' <<< "$t" && grep -qE ':8443\s' <<< "$t" && return 0 ;;
+            hysteria-server) grep -qE ':443\s' <<< "$u4" && return 0 ;;
+            telemt) grep -qE ':8880\s' <<< "$t" && return 0 ;;
+            ufw) ssh_open && return 0 ;;
+        esac
+    done
+    return 1
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+status)
+    echo "host $(hostname) up $(uptime -p | sed 's/^up //')"
+    echo "xray $(xray version | head -1 | awk '{print $2}') hysteria $(hysteria version 2>/dev/null | awk '/^Version/{print $2}') telemt $(telemt --version 2>/dev/null | awk '{print $2}')"
+    for u in $UNITS fail2ban ufw ssh bvpn-health.timer; do
+        s="$(systemctl is-active "$u" 2>/dev/null || true)"
+        [ "$s" = inactive ] && ! systemctl cat "$u" >/dev/null 2>&1 && continue
+        printf '%s=%s ' "$u" "$s"
+    done; echo
+    echo "listen: $(ss -lntu | awk 'NR>1 && $5 !~ /^127\.0\.0\.5[34]/ {print $1"/"$5}' | sort -u | tr '\n' ' ')"
+    df -h / | awk 'NR==2{print "disk "$5" used, "$4" free"}'
+    free -m | awk '/^Mem/{print "memory available "$7" MB"}'
+    [ -e /var/run/reboot-required ] && echo "reboot required" || true
+    echo "--- self-check"; cat /var/lib/bvpn-health/status 2>/dev/null || echo "no /var/lib/bvpn-health/status"
+    ;;
+show)
+    python3 -I - "$XCONF" <<'PY'
+import json, re, sys
+SECRET = re.compile(r'password|secret|token|ad_tag|privatekey|pin|auth_key|[0-9a-f]{32}', re.I)
+c = json.load(open(sys.argv[1]))
+print('xray log', c.get('log'))
+for i in c.get('inbounds', []):
+    ss = i.get('streamSettings', {}); r = ss.get('realitySettings', {})
+    x = {k: v for k, v in ss.get('xhttpSettings', {}).items() if k != 'path'}
+    print('IN', i.get('tag'), i.get('listen'), i.get('port'), i.get('protocol'), ss.get('network'), ss.get('security'),
+          'target', r.get('target', r.get('dest')), 'sni', r.get('serverNames'), 'shortIds', len(r.get('shortIds', [])),
+          'xhttp', x, 'sniff', i.get('sniffing', {}).get('enabled'),
+          'clients', [(k.get('email'), k.get('flow')) for k in i.get('settings', {}).get('clients', [])])
+for o in c.get('outbounds', []):
+    s = o.get('settings', {}).get('servers', [{}])[0] if o.get('protocol') == 'socks' else {}
+    print('OUT', o.get('tag'), o.get('protocol'), s.get('address', ''), s.get('port', ''))
+r = c.get('routing', {}); print('routing', r.get('domainStrategy'))
+for x in r.get('rules', []): print('  rule', {k: v for k, v in x.items() if k != 'type'})
+print('xray other keys', sorted(set(c) - {'log', 'inbounds', 'outbounds', 'routing'}))
+h = open('/etc/hysteria/config.yaml').read()
+print('hysteria', [l.rstrip() for l in h.splitlines() if l.strip() and not SECRET.search(l)])
+t = open('/etc/telemt/telemt.toml').read()
+print('telemt', [l for l in t.splitlines() if l.strip() and not l.lstrip().startswith('#') and not SECRET.search(l)])
+print('telemt users', re.findall(r'^\s*([A-Za-z0-9_-]+)\s*=\s*"[0-9a-f]{32}"', t, re.M))
+PY
+    ;;
+test)
+    xray_test "$XCONF" && echo "xray config OK" || die "xray config test FAILED"
+    ;;
+journal)
+    u="${1:-}"; unit_ok "$u"; m="${2:-60}"; [[ "$m" =~ ^[0-9]{1,5}$ ]] || die "minutes: a number"
+    journalctl -u "$u" --since "-${m}min" -p warning --no-pager -q | tail -200
+    ;;
+restart)
+    u="${1:-}"; unit_ok "$u"
+    [ "$u" != xray ] || xray_test "$XCONF" || die "xray config test failed - not restarting"
+    log "restart $u"; systemctl restart "$u"
+    check_up "$u" && echo "$u restarted and listening" || die "$u is NOT up after restart - look at: bvpn journal $u 10"
+    ;;
+xray-patch)
+    filter="$(head -c 20000)"; [ -n "$filter" ] || die "jq filter expected on stdin"
+    S="$(date -u +%F-%H%M%S)"; B="$XCONF.bak.$S"
+    T="$(mktemp /usr/local/etc/xray/cand.XXXXXX.json)"; trap 'rm -f "$T"' EXIT
+    jq "$filter" "$XCONF" > "$T" 2>/dev/null || die "jq filter failed - nothing changed"
+    jq -e '.inbounds | length > 0' "$T" >/dev/null || die "candidate has no inbounds - nothing changed"
+    XO="$(own "$XCONF")"; XM="$(mod "$XCONF")"; keep "$XCONF" "$T"
+    xray_test "$T" || die "candidate failed xray -test - nothing changed"
+    install -m 600 -o root -g root "$XCONF" "$B"
+    log "xray-patch, backup $B"
+    mv "$T" "$XCONF"; trap - EXIT
+    systemctl restart xray
+    if check_up xray; then echo "xray patched and listening; backup $B"
+    else install -m "$XM" -o "${XO%:*}" -g "${XO#*:}" "$B" "$XCONF"; systemctl restart xray
+         check_up xray && die "patched xray did not come up - backup restored, xray is up" \
+                       || die "patched xray did not come up, restored backup did not either - SSH in as root now"
+    fi
+    ;;
+snapshot)
+    [ $# -eq 0 ] || { [ "$1" = --probe ] && [[ "${2:-}" =~ ^[0-9.]{7,15}$ ]] && [ $# -eq 2 ]; } || die "snapshot [--probe IPv4]"
+    lib snapshot "$@"
+    ;;
+linkcheck)
+    lib linkcheck
+    ;;
+selftest)
+    [ $# -eq 0 ] || { [ "$1" = --via ] && [[ "${2:-}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] && { [ $# -eq 2 ] || { [ $# -eq 4 ] && [ "$3" = --map ] \
+        && [[ "$4" =~ ^(tcp|udp)[0-9]{1,5}=[0-9]{1,5}(,(tcp|udp)[0-9]{1,5}=[0-9]{1,5}){0,9}$ ]]; }; }; } || die "selftest [--via IPv4 [--map tcpPORT=PORT,...]]"
+    lib selftest "$@"
+    ;;
+pending)
+    for f in "$PEND"/*; do [ -e "$f" ] && echo "$(basename "$f") $(sed -n 's/^UNIT=//p' "$f") reverts at $(date -u -d "@$(sed -n 's/^REVERT_AT=//p' "$f")" +%FT%TZ)"; done; true
+    ;;
+apply)
+    id="${1:-}"; kind="${2:-}"; secs="${3:-300}"; id_ok "$id"
+    [[ "$secs" =~ ^[0-9]{2,3}$ ]] && [ "$secs" -ge 60 ] && [ "$secs" -le 900 ] || die "seconds: 60..900"
+    install -d -m 755 "$VAR"; install -d -m 700 "$PEND"
+    [ -z "$(ls -A "$PEND")" ] || die "a change is already waiting for confirmation: $(ls "$PEND") - confirm or revert it first"
+    input="$(head -c 20000)"; [ -n "$input" ] || die "nothing on stdin"
+    S="$(date -u +%F-%H%M%S)"
+    case "$kind" in
+    xray)
+        UNIT=xray CONF="$XCONF" OWNER="$(own "$XCONF")" MODE="$(mod "$XCONF")"
+        T="$(mktemp /usr/local/etc/xray/cand.XXXXXX.json)"; trap 'rm -f "$T"' EXIT
+        printf '%s' "$input" > "$T.filter"
+        jq -f "$T.filter" "$XCONF" > "$T" 2>/dev/null || { rm -f "$T.filter"; die "jq filter failed - nothing changed"; }
+        rm -f "$T.filter"
+        lib guard "$XCONF" "$T" || die "the change is not allowed through apply - nothing changed"
+        keep "$XCONF" "$T"
+        xray_test "$T" || die "candidate failed xray -test - nothing changed"
+        ;;
+    hysteria-userpass)
+        UNIT=hysteria-server CONF="$HCONF" OWNER="$(own "$HCONF")" MODE="$(mod "$HCONF")"
+        T="$(mktemp /etc/hysteria/cand.XXXXXX.yaml)"; trap 'rm -f "$T"' EXIT
+        printf '%s' "$input" | lib hy-auth "$T" >/dev/null || die "could not build the Hysteria2 candidate - nothing changed"
+        keep "$HCONF" "$T"
+        ;;
+    *) die "kind: xray | hysteria-userpass" ;;
+    esac
+    # what works BEFORE the change: only a channel that worked and now fails is the change's fault
+    BASE="$VAR/selftest-before-$id.json"
+    lib selftest > "$BASE" 2>/dev/null || true
+    B="$CONF.bak.$S"; install -m 600 -o root -g root "$CONF" "$B"
+    log "apply $id $kind, backup $B"
+    pending_write "$id" "$secs" "$UNIT|$CONF|$B|$OWNER|$MODE"
+    # the dead man's switch goes live BEFORE the restart: whatever happens to this process next,
+    # the server puts the backup back by itself
+    systemd-run --quiet --unit="bvpn-revert-$id" --on-active="${secs}s" --timer-property=AccuracySec=1s \
+        /usr/local/sbin/bvpn revert "$id" --auto
+    mv "$T" "$CONF"; trap - EXIT
+    systemctl restart "$UNIT"
+    fail=""
+    check_up "$UNIT" || fail="$UNIT did not come up"
+    [ -n "$fail" ] || lib selftest --baseline "$BASE" >/dev/null 2>"$VAR/selftest-diff-$id" || fail="selftest: $(tr '\n' ' ' < "$VAR/selftest-diff-$id")"
+    rm -f "$BASE" "$VAR/selftest-diff-$id"
+    if [ -n "$fail" ]; then
+        systemctl stop "bvpn-revert-$id.timer" 2>/dev/null || true
+        if put_back "$PEND/$id"; then rm -f "$PEND/$id"; log "apply $id: $fail - reverted"; die "$fail - backup restored, $UNIT is up"; fi
+        rm -f "$PEND/$id"; alert "VPN: $UNIT не поднялся ни с правкой $id, ни с копией - нужен вход root"
+        die "$fail, and the restored backup did not come up either - SSH in as root now"
+    fi
+    echo "applied $id: $UNIT up, selftest OK. Keep it: bvpn confirm $id (within ${secs}s, otherwise it reverts itself). Backup $B"
+    ;;
+confirm)
+    id="${1:-}"; id_ok "$id"; [ -e "$PEND/$id" ] || die "nothing waits under $id (already confirmed or reverted?)"
+    systemctl stop "bvpn-revert-$id.timer" 2>/dev/null || true
+    rm -f "$PEND/$id"; log "confirm $id"; echo "kept $id"
+    ;;
+revert)
+    id="${1:-}"; id_ok "$id"; [ -e "$PEND/$id" ] || die "nothing waits under $id (already confirmed or reverted?)"
+    [ "${2:-}" = --auto ] || systemctl stop "bvpn-revert-$id.timer" 2>/dev/null || true
+    if put_back "$PEND/$id"; then
+        rm -f "$PEND/$id"; log "revert $id ${2:-}"
+        [ "${2:-}" != --auto ] || alert "VPN: правку $id никто не подтвердил - откатил сам, службы работают"
+        echo "reverted $id"
+    else
+        rm -f "$PEND/$id"; alert "VPN: откат $id не поднял службу - нужен вход root"
+        die "reverted $id but the unit is NOT up - SSH in as root now"
+    fi
+    ;;
+person-add|person-remove|person-pause|person-resume)
+    id="${1:-}"; id_ok "$id"; secs="${3:-600}"
+    [[ "${2:-}" =~ ^[a-z][a-z0-9]{1,15}$ ]] || die "$cmd ID <login> [seconds]"
+    [[ "$secs" =~ ^[0-9]{2,3}$ ]] && [ "$secs" -ge 60 ] && [ "$secs" -le 900 ] || die "seconds: 60..900"
+    install -d -m 755 "$VAR"; install -d -m 700 "$PEND"
+    [ -z "$(ls -A "$PEND")" ] || die "a change is already waiting for confirmation: $(ls "$PEND") - confirm or revert it first"
+    TCONF=/etc/telemt/telemt.toml
+    hy_kind="$(python3 -I -c 'import yaml,sys; print((yaml.safe_load(open(sys.argv[1])) or {}).get("auth",{}).get("type",""))' "$HCONF")"
+    # Telemt is optional: without it only Xray (and Hysteria) change
+    [ -f "$TCONF" ] || TCONF=""
+    has() { [ "$(jq --arg n "$1" '[.inbounds[].settings.clients[]? | select((.email|split("-")[0])==$n)] | length' "$XCONF")" != 0 ] || { [ -n "$TCONF" ] && grep -q "^$1 = " "$TCONF"; }; }
+    XC="$(mktemp /usr/local/etc/xray/cand.XXXXXX.json)"; TC=""; [ -z "$TCONF" ] || TC="$(mktemp /etc/telemt/cand.XXXXXX.toml)"; HC=""; PST=""
+    trap 'rm -f "$XC" ${TC:+"$TC"} ${HC:+"$HC"} ${PST:+"$PST" "$PST.j"}' EXIT
+    if [ "$cmd" = person-add ]; then
+        tmpl="$2"; req="$(head -c 2000)"
+        LOGIN="$(printf '%s' "$req" | jq -r '.login // empty')"; NAME="$(printf '%s' "$req" | jq -r '.name // empty')"
+        [[ "$LOGIN" =~ ^[a-z][a-z0-9]{1,15}$ ]] || die "login: 2-16 latin lowercase letters/digits"
+        [ -n "$NAME" ] && [ "${#NAME}" -le 40 ] && [[ "$NAME" != *[$'\n\r|"\\']* ]] || die "name: up to 40 characters, no quotes, | or backslash"
+        ! has "$LOGIN" || die "$LOGIN already exists on this server"
+        OLDU="$(jq -r --arg t "$tmpl" '.inbounds[] | select(.tag=="vless-tls") | .settings.clients[] | select(.email==($t+"-tls")) | .id' "$XCONF")"
+        # no Telemt: a random OLDK that no kit holds, so the kit builder has nothing to swap there
+        if [ -n "$TCONF" ]; then OLDK="$(grep -m1 "^$tmpl = " "$TCONF" | cut -d'"' -f2)"; else OLDK="$(openssl rand -hex 16)"; fi
+        [ -n "$OLDU" ] && [ -n "$OLDK" ] || die "template $tmpl not found in Xray or Telemt"
+        U="$(xray uuid)"; K="$(openssl rand -hex 16)"
+        # the same UUID in VLESS+TLS 2083 (vision flow) and XHTTP
+        jq --arg u "$U" --arg n "$LOGIN" '(.inbounds[] | select(.tag=="vless-xhttp") | .settings.clients) += [{id:$u, email:($n+"-xhttp")}] | (.inbounds[] | select(.tag=="vless-tls") | .settings.clients) += [{id:$u, flow:"xtls-rprx-vision", email:($n+"-tls")}]' "$XCONF" > "$XC"
+        if [ -n "$TC" ]; then
+            cp "$TCONF" "$TC"; sed -i "/^$tmpl = /a $LOGIN = \"$K\"" "$TC"
+            grep -q "^$LOGIN = \"$K\"\$" "$TC" || die "telemt edit failed - nothing changed"
+        fi
+        if [ "$hy_kind" = userpass ]; then
+            TP="$(python3 -I -c 'import yaml,sys; print(yaml.safe_load(open(sys.argv[1]))["auth"]["userpass"][sys.argv[2]])' "$HCONF" "$tmpl")" \
+                || die "template $tmpl has no Hysteria2 password"
+            HP="$(openssl rand -hex 16)"; OLDAUTH="$tmpl:$TP"; NEWAUTH="$LOGIN:$HP"
+            HC="$(mktemp /etc/hysteria/cand.XXXXXX.yaml)"
+            printf '{"merge":true,"users":{"%s":"%s"}}' "$LOGIN" "$HP" | lib hy-auth "$HC" >/dev/null || die "Hysteria2 candidate failed - nothing changed"
+        else
+            OLDAUTH="$(python3 -I -c 'import yaml,sys; print(yaml.safe_load(open(sys.argv[1]))["auth"]["password"])' "$HCONF")"; NEWAUTH="$OLDAUTH"
+        fi
+    elif [ "$cmd" = person-pause ]; then
+        # like person-remove, but what is taken out is kept in $PAUSED/<login>.json (root 600): person-resume
+        # puts back the same keys, so the person's links and subscription work again unchanged
+        LOGIN="$2"
+        [ "$LOGIN" != "$(lib template)" ] || die "refusing to pause $LOGIN: the template of new people"
+        has "$LOGIN" || die "$LOGIN is not on this server"
+        install -d -m 700 "$PAUSED"
+        PST="$(mktemp "$PAUSED/.cand.XXXXXX")"
+        jq --arg n "$LOGIN" '{xray: [.inbounds[] | {tag, clients: [(.settings.clients // [])[] | select((.email|split("-")[0]) == $n)]}
+                               | select(.clients | length > 0)]}' "$XCONF" > "$PST"
+        TL=""; [ -z "$TCONF" ] || TL="$(grep -m1 "^$LOGIN = " "$TCONF" || true)"
+        HP=""; [ "$hy_kind" != userpass ] || HP="$(python3 -I -c 'import yaml,sys; print(((yaml.safe_load(open(sys.argv[1])) or {}).get("auth",{}).get("userpass") or {}).get(sys.argv[2],""))' "$HCONF" "$LOGIN")"
+        jq --arg t "$TL" --arg h "$HP" '. + {telemt: $t, hysteria: $h}' "$PST" > "$PST.j" && mv "$PST.j" "$PST"; chmod 600 "$PST"
+        jq --arg n "$LOGIN" '(.inbounds[].settings.clients) |= (if . == null then . else map(select((.email|split("-")[0]) != $n)) end)' "$XCONF" > "$XC"
+        [ -z "$TC" ] || { cp "$TCONF" "$TC"; sed -i "/^$LOGIN = /d" "$TC"; }
+        if [ "$hy_kind" = userpass ] && [ -n "$HP" ]; then
+            HC="$(mktemp /etc/hysteria/cand.XXXXXX.yaml)"
+            printf '{"merge":true,"remove":["%s"]}' "$LOGIN" | lib hy-auth "$HC" >/dev/null || die "Hysteria2 candidate failed - nothing changed"
+        fi
+    elif [ "$cmd" = person-resume ]; then
+        LOGIN="$2"; ST="$PAUSED/$LOGIN.json"
+        ! has "$LOGIN" || die "$LOGIN is not paused: already on this server"
+        [ -s "$ST" ] || die "$LOGIN was never paused here (no $ST)"
+        jq --slurpfile st "$ST" '.inbounds |= map(. as $ib | [$st[0].xray[] | select(.tag == $ib.tag) | .clients[]] as $c
+                                  | if ($c | length) > 0 then .settings.clients += $c else . end)' "$XCONF" > "$XC"
+        [ -z "$TC" ] || cp "$TCONF" "$TC"
+        TL="$(jq -r '.telemt // ""' "$ST")"
+        if [ -n "$TL" ] && [ -n "$TC" ]; then
+            [[ "$TL" =~ ^[a-z][a-z0-9]{1,15}\ =\ \"[0-9a-f]{32}\"$ ]] || die "the saved Telegram proxy line looks wrong - nothing changed"
+            sed -i "/^\[access.users\]/a $TL" "$TC"; grep -qxF "$TL" "$TC" || die "telemt edit failed - nothing changed"
+        fi
+        HP="$(jq -r '.hysteria // ""' "$ST")"
+        if [ "$hy_kind" = userpass ] && [ -n "$HP" ]; then
+            [[ "$HP" =~ ^[0-9a-f]{32}$ ]] || die "the saved Hysteria2 password looks wrong - nothing changed"
+            HC="$(mktemp /etc/hysteria/cand.XXXXXX.yaml)"
+            printf '{"merge":true,"users":{"%s":"%s"}}' "$LOGIN" "$HP" | lib hy-auth "$HC" >/dev/null || die "Hysteria2 candidate failed - nothing changed"
+        fi
+    else
+        LOGIN="$2"
+        [ "$LOGIN" != "$(lib template)" ] || die "refusing to remove $LOGIN: the template of new people"
+        has "$LOGIN" || die "$LOGIN is not on this server"
+        jq --arg n "$LOGIN" '(.inbounds[].settings.clients) |= (if . == null then . else map(select((.email|split("-")[0]) != $n)) end)' "$XCONF" > "$XC"
+        [ -z "$TC" ] || { cp "$TCONF" "$TC"; sed -i "/^$LOGIN = /d" "$TC"; }
+        if [ "$hy_kind" = userpass ]; then
+            HC="$(mktemp /etc/hysteria/cand.XXXXXX.yaml)"
+            printf '{"merge":true,"remove":["%s"]}' "$LOGIN" | lib hy-auth "$HC" >/dev/null || die "Hysteria2 candidate failed - nothing changed"
+        fi
+    fi
+    keep "$XCONF" "$XC"
+    xray_test "$XC" || die "Xray candidate failed xray -test - nothing changed"
+    [ -z "$TC" ] || keep "$TCONF" "$TC"
+    [ -z "$HC" ] || keep "$HCONF" "$HC"
+    BASE="$VAR/selftest-before-$id.json"; lib selftest > "$BASE" 2>/dev/null || true
+    S="$(date -u +%F-%H%M%S)"; E=(); units=(xray ${TC:+telemt})
+    for c in "$XCONF" ${TC:+"$TCONF"} ${HC:+"$HCONF"}; do
+        install -m 600 -o root -g root "$c" "$c.bak.$S"
+        case "$c" in "$XCONF") E+=("xray|$c|$c.bak.$S|$(own "$c")|$(mod "$c")") ;;
+                     "$TCONF") E+=("telemt|$c|$c.bak.$S|$(own "$c")|$(mod "$c")") ;;
+                     *) E+=("hysteria-server|$c|$c.bak.$S|$(own "$c")|$(mod "$c")"); units+=(hysteria-server) ;; esac
+    done
+    # the names of people change with the configs: a rollback takes the name back as well
+    if [ -s /etc/bvpn/people ] && { [ "$cmd" = person-add ] || [ "$cmd" = person-remove ]; }; then
+        install -m 600 -o root -g root /etc/bvpn/people "/etc/bvpn/people.bak.$S"
+        E+=("-|/etc/bvpn/people|/etc/bvpn/people.bak.$S|$(own /etc/bvpn/people)|$(mod /etc/bvpn/people)")
+    fi
+    log "$cmd $id $LOGIN, backups *.bak.$S"
+    pending_write "$id" "$secs" "${E[@]}"
+    arm "$id" "$secs"
+    mv "$XC" "$XCONF"; [ -z "$TC" ] || mv "$TC" "$TCONF"; [ -z "$HC" ] || mv "$HC" "$HCONF"; trap - EXIT
+    settle "$id" "$BASE" "${units[@]}"
+    if [ "$cmd" = person-add ]; then
+        sed -i "/^$LOGIN|/d" /etc/bvpn/people 2>/dev/null || true; echo "$LOGIN|$NAME" >> /etc/bvpn/people
+        echo "kit: $OLDU $U $OLDK $K $OLDAUTH $NEWAUTH"
+    elif [ "$cmd" = person-pause ]; then
+        mv -f "$PST" "$PAUSED/$LOGIN.json"; PST=""     # the name stays in /etc/bvpn/people: the panel shows "paused"
+    elif [ "$cmd" = person-remove ]; then
+        sed -i "/^$LOGIN|/d" /etc/bvpn/people 2>/dev/null || true
+    fi
+    echo "$cmd $LOGIN: ${units[*]} up, selftest OK. Keep it: bvpn confirm $id (within ${secs}s, otherwise it reverts itself)"
+    ;;
+update)
+    id="${1:-}"; id_ok "$id"; prog="${2:-}"; ver="${3:-}"; secs="${4:-300}"
+    [[ "$ver" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || die "version: N.N.N"
+    [[ "$secs" =~ ^[0-9]{2,3}$ ]] && [ "$secs" -ge 60 ] && [ "$secs" -le 900 ] || die "seconds: 60..900"
+    [ "$(uname -m)" = x86_64 ] || die "only x86_64 builds are fetched"
+    install -d -m 755 "$VAR"; install -d -m 700 "$PEND"
+    [ -z "$(ls -A "$PEND")" ] || die "a change is already waiting for confirmation: $(ls "$PEND") - confirm or revert it first"
+    W="$(mktemp -d "$VAR/update.XXXXXX")"; trap 'rm -rf "$W"; rm -f "${BIN:-/nonexistent}.new"' EXIT
+    get() { curl -fsSL --proto '=https' --max-time 180 -o "$2" "$1" || die "download failed: $1 - nothing changed"; }
+    case "$prog" in
+    xray)
+        BIN=/usr/local/bin/xray UNIT=xray
+        [ "$(xray version | head -1 | awk '{print $2}')" != "$ver" ] || die "xray $ver is already installed"
+        u="https://github.com/XTLS/Xray-core/releases/download/v$ver/Xray-linux-64.zip"
+        get "$u" "$W/x.zip"; get "$u.dgst" "$W/x.dgst"
+        want="$(sed -n 's/^SHA2-256= *//p' "$W/x.dgst" | head -1)"
+        python3 -I -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); open(sys.argv[2],"wb").write(z.read("xray"))' "$W/x.zip" "$W/new" \
+            || die "no xray in the archive - nothing changed"
+        got="$(sha256sum "$W/x.zip" | cut -d' ' -f1)" ;;
+    hysteria)
+        BIN=/usr/local/bin/hysteria UNIT=hysteria-server
+        [ "$(hysteria version 2>/dev/null | awk '/^Version/{print $2}')" != "v$ver" ] || die "hysteria $ver is already installed"
+        u="https://github.com/HyNetworks/hysteria/releases/download/app/v$ver"
+        get "$u/hysteria-linux-amd64" "$W/new"; get "$u/hashes.txt" "$W/hashes"
+        want="$(awk '$2 ~ /hysteria-linux-amd64$/ {print $1}' "$W/hashes" | head -1)"
+        got="$(sha256sum "$W/new" | cut -d' ' -f1)" ;;
+    *) die "program: xray | hysteria (telemt: manage its installation separately through SSH)" ;;
+    esac
+    [[ "$want" =~ ^[0-9a-f]{64}$ ]] && [ "$got" = "$want" ] || die "SHA-256 does not match the published digest - nothing changed"
+    install -m 755 -o root -g root "$W/new" "$BIN.new"
+    case "$prog" in
+        # read the whole output first: under pipefail `x | grep -q` fails when grep closes the pipe early
+        xray) nv="$("$BIN.new" version 2>/dev/null || true)"; case "$nv" in *" $ver "*) ;; *) die "the downloaded xray does not say $ver - nothing changed" ;; esac
+              runuser -u "$(xray_user)" -- "$BIN.new" run -test -config "$XCONF" >/dev/null 2>&1 || die "xray $ver does not accept the live config - nothing changed" ;;
+        hysteria) nv="$("$BIN.new" version 2>/dev/null || true)"; case "$nv" in *"v$ver"*) ;; *) die "the downloaded hysteria does not say v$ver - nothing changed" ;; esac ;;
+    esac
+    BASE="$VAR/selftest-before-$id.json"; lib selftest > "$BASE" 2>/dev/null || true
+    S="$(date -u +%F-%H%M%S)"; install -m 755 -o root -g root "$BIN" "$BIN.bak.$S"
+    log "update $id $prog $ver, old binary $BIN.bak.$S"
+    pending_write "$id" "$secs" "$UNIT|$BIN|$BIN.bak.$S|root:root|755"
+    arm "$id" "$secs"
+    mv -f "$BIN.new" "$BIN"
+    settle "$id" "$BASE" "$UNIT"
+    echo "updated $prog to $ver: $UNIT up, selftest OK. Keep it: bvpn confirm $id (within ${secs}s, otherwise the old binary comes back). Old binary $BIN.bak.$S"
+    ;;
+ufw)
+    id="${1:-}"; id_ok "$id"
+    op="${2:-}"; rule="${3:-}"; secs="${4:-300}"
+    [[ "$secs" =~ ^[0-9]{2,3}$ ]] && [ "$secs" -ge 60 ] && [ "$secs" -le 900 ] || die "seconds: 60..900"
+    install -d -m 755 "$VAR"; install -d -m 700 "$PEND"
+    [ -z "$(ls -A "$PEND")" ] || die "a change is already waiting for confirmation: $(ls "$PEND") - confirm or revert it first"
+    S="$(date -u +%F-%H%M%S)"; BASE="$VAR/selftest-before-$id.json"
+    [[ "$op" =~ ^(allow|delete)$ ]] || die "ufw ID allow|delete PORT/PROTO"
+    [[ "$rule" =~ ^([0-9]{1,5})/(tcp|udp)$ ]] || die "rule: PORT/tcp or PORT/udp"
+    port="${BASH_REMATCH[1]}"; [ "$port" -ge 1 ] && [ "$port" -le 65535 ] && [ "$port" != 22 ] || die "port 1..65535, never 22"
+    ssh_open || die "SSH is not open in ufw right now - fix that by hand first"
+    lib selftest > "$BASE" 2>/dev/null || true
+    E=(); for f in /etc/ufw/user.rules /etc/ufw/user6.rules; do
+        install -m 600 -o root -g root "$f" "$f.bak.$S"; E+=("ufw|$f|$f.bak.$S|root:root|$(stat -c %a "$f")"); done
+    log "ufw $id $op $rule, backups *.bak.$S"
+    pending_write "$id" "$secs" "${E[@]}"
+    arm "$id" "$secs"
+    if [ "$op" = allow ]; then ufw allow "$rule" >/dev/null; else ufw delete allow "$rule" >/dev/null; fi
+    settle "$id" "$BASE" ufw
+    echo "ufw $op $rule: SSH still open, selftest OK. Keep it: bvpn confirm $id (within ${secs}s, otherwise the old rules come back)"
+    ;;
+*) sed -n '2,53p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

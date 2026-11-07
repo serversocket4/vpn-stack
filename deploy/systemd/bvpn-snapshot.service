@@ -1,0 +1,9 @@
+[Unit]
+Description=VPN panel: snapshots of both VPN servers -> /var/lib/bvpn/panel.json
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/bvpn/vpnjob.py snapshot-all
+TimeoutStartSec=300
+Nice=10

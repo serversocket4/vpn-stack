@@ -1,0 +1,9 @@
+[Unit]
+Description=VPN server self-check every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

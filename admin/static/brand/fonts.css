@@ -1,0 +1,2 @@
+/* System fonts; no bundled font assets. */
+:root{--font-body:system-ui,-apple-system,"Segoe UI",sans-serif;--font-display:system-ui,-apple-system,"Segoe UI",sans-serif}

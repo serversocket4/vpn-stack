@@ -1,0 +1,71 @@
+/* Дизайн-система — Typography tokens.
+   Display: Tactic Sans Expanded — modular scale, ratio 1.333 (perfect fourth).
+     The brand's existing 96/72/54/40/30 ramp already IS a perfect fourth;
+     it is formalised here and extended one step up and down.
+   Body: Manrope — ratio 1.125 (major second), rounded to even px. */
+:root{
+  --font-display:system-ui,-apple-system,"Segoe UI",sans-serif; /* @kind font */
+  --font-body:system-ui,-apple-system,"Segoe UI",sans-serif; /* @kind font */
+
+  /* Weights */
+  --fw-light:300; /* @kind font */
+  --fw-regular:400; /* @kind font */
+  --fw-medium:500; /* @kind font */
+  --fw-semibold:600; /* @kind font */
+  --fw-bold:700; /* @kind font */
+  --fw-extrabold:800; /* @kind font */
+  --fw-black:900; /* @kind font */
+
+  /* ---- Display scale (Tactic Sans) · ratio 1.333 ----
+     Tactic is extended, so line-height stays sub-1.0 at hero sizes.
+     Tracking OPENS as size drops — wide caps need air when small. */
+  --fs-display-3xl:128px; /* @kind font */ --lh-display-3xl:0.90; /* @kind font */ --ls-display-3xl:0.00em; /* @kind font */
+  --fs-display-2xl:96px;  /* @kind font */ --lh-display-2xl:0.92; /* @kind font */ --ls-display-2xl:0.01em; /* @kind font */
+  --fs-display-xl:72px;   /* @kind font */ --lh-display-xl:0.94;  /* @kind font */ --ls-display-xl:0.01em; /* @kind font */
+  --fs-display-lg:54px;   /* @kind font */ --lh-display-lg:0.96;  /* @kind font */ --ls-display-lg:0.015em; /* @kind font */
+  --fs-display-md:40px;   /* @kind font */ --lh-display-md:1.00;  /* @kind font */ --ls-display-md:0.02em; /* @kind font */
+  --fs-display-sm:30px;   /* @kind font */ --lh-display-sm:1.04;  /* @kind font */ --ls-display-sm:0.03em; /* @kind font */
+  --fs-display-xs:22px;   /* @kind font */ --lh-display-xs:1.10;  /* @kind font */ --ls-display-xs:0.04em; /* @kind font */
+
+  /* ---- Body / UI scale (Manrope) · ratio 1.125 ---- */
+  --fs-2xl:24px; /* @kind font */ --lh-2xl:1.30; /* @kind font */
+  --fs-xl:20px;  /* @kind font */ --lh-xl:1.35;  /* @kind font */
+  --fs-lg:18px;  /* @kind font */ --lh-lg:1.45;  /* @kind font */
+  --fs-md:16px;  /* @kind font */ --lh-md:1.50;  /* @kind font */
+  --fs-sm:14px;  /* @kind font */ --lh-sm:1.50;  /* @kind font */
+  --fs-xs:12px;  /* @kind font */ --lh-xs:1.40;  /* @kind font */
+
+  /* ---- Tracking roles ---- */
+  --tracking-display:0.01em;  /* @kind font */
+  --tracking-bracket:0.06em;  /* @kind font */
+  --tracking-label:0.14em;    /* @kind font */ /* all-caps micro labels ≥12px only */
+  --tracking-body:0;          /* @kind font */
+
+  /* ---- Fluid display (landing / responsive web) ----
+     Caps the hero so a 390px phone never gets a 96px headline.
+     MD3 & HIG both require reflow without horizontal scroll at 320px. */
+  --fs-hero-fluid:clamp(38px,8.2vw,96px);  /* @kind font */
+  --fs-h1-fluid:clamp(30px,5.6vw,72px);    /* @kind font */
+  --fs-h2-fluid:clamp(26px,4.2vw,54px);    /* @kind font */
+  --fs-h3-fluid:clamp(22px,3.0vw,40px);    /* @kind font */
+  --fs-body-fluid:clamp(15px,1.2vw,18px);  /* @kind font */
+
+  /* ---- Semantic type roles ---- */
+  --text-hero:var(--fw-black) var(--fs-display-2xl)/var(--lh-display-2xl) var(--font-display); /* @kind font */
+  --text-h1:var(--fw-bold) var(--fs-display-xl)/var(--lh-display-xl) var(--font-display); /* @kind font */
+  --text-h2:var(--fw-bold) var(--fs-display-lg)/var(--lh-display-lg) var(--font-display); /* @kind font */
+  --text-h3:var(--fw-bold) var(--fs-display-md)/var(--lh-display-md) var(--font-display); /* @kind font */
+  --text-h4:var(--fw-bold) var(--fs-display-sm)/var(--lh-display-sm) var(--font-display); /* @kind font */
+  --text-h5:var(--fw-bold) var(--fs-display-xs)/var(--lh-display-xs) var(--font-display); /* @kind font */
+  --text-body-lg:var(--fw-regular) var(--fs-lg)/var(--lh-lg) var(--font-body); /* @kind font */
+  --text-body:var(--fw-regular) var(--fs-md)/var(--lh-md) var(--font-body); /* @kind font */
+  --text-body-sm:var(--fw-regular) var(--fs-sm)/var(--lh-sm) var(--font-body); /* @kind font */
+  --text-label:var(--fw-semibold) var(--fs-sm)/1.2 var(--font-body); /* @kind font */
+  --text-caption:var(--fw-medium) var(--fs-xs)/var(--lh-xs) var(--font-body); /* @kind font */
+
+  /* ---- Minimum legible sizes (enforced, not advisory) ---- */
+  --fs-min-body-web:15px;    /* @kind font */ /* landing body floor */
+  --fs-min-body-slide:24px;  /* @kind font */ /* 1920×1080 slide floor */
+  --fs-min-caps:12px;        /* @kind font */ /* Tactic UPPERCASE hard floor */
+  --fs-min-caps-comfort:14px;/* @kind font */ /* preferred caps floor */
+}

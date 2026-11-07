@@ -1,0 +1,11 @@
+[Unit]
+Description=VPN panel: job %i approved by the owner in the bot
+After=network-online.target
+
+[Service]
+# 1 = the job ran and failed, 2 = refused: both are written to results/<id>.json and reported in the bot.
+# Not a unit failure - otherwise every failed job stays as a "failed" unit and an alarm in the admin.
+SuccessExitStatus=1 2
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/bvpn/vpnjob.py run %i
+TimeoutStartSec=360

@@ -1,0 +1,109 @@
+/* Дизайн-система — Spacing, grid, radii, elevation, motion, targets.
+
+   SPACING BASE = 4px, with an 8px-preferred rhythm.
+   Rationale: Material Design 3 uses a 4dp grid; Apple HIG layout margins land on
+   multiples of 4/8. A 4px base is required because the marketplace-card context needs
+   sub-8 steps (badge padding, hairline insets) that an 8px-only scale cannot express.
+   Rule: use 8px multiples for layout, reserve 4/12/20 for component internals. */
+:root{
+  /* ---- Spacing scale ---- */
+  --space-0:0px;    /* @kind spacing */
+  --space-1:4px;    /* @kind spacing */
+  --space-2:8px;    /* @kind spacing */
+  --space-3:12px;   /* @kind spacing */
+  --space-4:16px;   /* @kind spacing */
+  --space-5:20px;   /* @kind spacing */
+  --space-6:24px;   /* @kind spacing */
+  --space-8:32px;   /* @kind spacing */
+  --space-10:40px;  /* @kind spacing */
+  --space-12:48px;  /* @kind spacing */
+  --space-16:64px;  /* @kind spacing */
+  --space-20:80px;  /* @kind spacing */
+  --space-24:96px;  /* @kind spacing */
+  --space-32:128px; /* @kind spacing */
+
+  /* ---- Product "air" (Polestar discipline on graphite) ----
+     Minimum clear space around a product shot, as a share of its own width. */
+  --product-air-min:12%;  /* @kind other */
+  --product-air-ideal:18%;/* @kind other */
+
+  /* ---- Grid: marketplace card (900×1200, WB/Ozon) ---- */
+  --grid-card-width:900px;    /* @kind spacing */
+  --grid-card-height:1200px;  /* @kind spacing */
+  --grid-card-margin:60px;    /* @kind spacing */
+  --grid-card-cols:6;         /* @kind other */
+  --grid-card-gutter:16px;    /* @kind spacing */
+  --grid-card-safe-top:48px;    /* @kind spacing */
+  --grid-card-safe-bottom:54px; /* @kind spacing */
+
+  /* ---- Grid: presentation slide (1280×720 / 1920×1080) ---- */
+  --grid-slide-margin:72px;   /* @kind spacing */
+  --grid-slide-cols:12;       /* @kind other */
+  --grid-slide-gutter:24px;   /* @kind spacing */
+
+  /* ---- Grid: landing ---- */
+  --grid-web-max:1200px;      /* @kind spacing */
+  --grid-web-cols:12;         /* @kind other */
+  --grid-web-gutter:24px;     /* @kind spacing */
+  --grid-web-margin-desktop:56px; /* @kind spacing */
+  --grid-web-margin-tablet:32px;  /* @kind spacing */
+  --grid-web-margin-mobile:20px;  /* @kind spacing */
+  --container-max:1200px;     /* @kind spacing */
+
+  /* ---- Section rhythm ---- */
+  --section-gap-desktop:96px; /* @kind spacing */
+  --section-gap-mobile:56px;  /* @kind spacing */
+
+  /* ---- Radii ---- */
+  --radius-xs:6px;    /* @kind radius */
+  --radius-sm:10px;   /* @kind radius */
+  --radius-md:16px;   /* @kind radius */
+  --radius-lg:24px;   /* @kind radius */
+  --radius-xl:32px;   /* @kind radius */
+  --radius-pill:999px;/* @kind radius */
+
+  /* ---- Borders ---- */
+  --border-hairline:1px; /* @kind spacing */
+  --border-thick:2px;    /* @kind spacing */
+  --focus-width:2px;     /* @kind spacing */
+  --focus-offset:2px;    /* @kind spacing */
+
+  /* ---- Touch / hit targets ----
+     HIG: 44×44pt minimum. MD3: 48×48dp minimum. We take the larger. */
+  --target-min:44px;      /* @kind spacing */
+  --target-comfort:48px;  /* @kind spacing */
+
+  /* ---- Elevation ---- */
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.40);   /* @kind shadow */
+  --shadow-md:0 8px 24px rgba(0,0,0,0.45);  /* @kind shadow */
+  --shadow-lg:0 24px 60px rgba(0,0,0,0.55); /* @kind shadow */
+  --shadow-modal:0 32px 80px rgba(0,0,0,0.65); /* @kind shadow */
+  --glow-aqua-sm:0 0 12px rgba(143,184,250,0.50);     /* @kind shadow */
+  --glow-aqua:0 0 24px rgba(143,184,250,0.45);        /* @kind shadow */
+  --glow-aqua-strong:0 0 40px rgba(143,184,250,0.55); /* @kind shadow */
+  --inner-hairline:inset 0 0 0 1px rgba(245,246,247,0.08); /* @kind shadow */
+  /* Contact shadow under a product shot — grounds it on the graphite stage */
+  --shadow-product:0 60px 80px -30px rgba(0,0,0,0.85); /* @kind shadow */
+
+  /* ---- Motion ----
+     MD3 emphasized-decelerate for entrances; short, non-bouncy. */
+  --ease-out:cubic-bezier(0.16,1,0.3,1);      /* @kind other */
+  --ease-in-out:cubic-bezier(0.65,0,0.35,1);  /* @kind other */
+  --ease-standard:cubic-bezier(0.2,0,0,1);    /* @kind other */
+  --dur-fast:120ms; /* @kind other */
+  --dur-base:200ms;  /* @kind other */
+  --dur-slow:360ms;  /* @kind other */
+  --dur-reveal:500ms;/* @kind other */
+  --press-scale:0.97;/* @kind other */
+}
+
+/* WCAG 2.2 — 2.3.3 Animation from Interactions */
+@media (prefers-reduced-motion:reduce){
+  :root{
+    --dur-fast:1ms; /* @kind other */
+    --dur-base:1ms; /* @kind other */
+    --dur-slow:1ms; /* @kind other */
+    --dur-reveal:1ms; /* @kind other */
+    --press-scale:1; /* @kind other */
+  }
+}

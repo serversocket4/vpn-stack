@@ -1,0 +1,7 @@
+[Unit]
+Description=Certificate of the IP from Caddy to Xray
+After=caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/bvpn-tls-sync

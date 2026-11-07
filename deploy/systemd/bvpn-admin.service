@@ -1,0 +1,24 @@
+[Unit]
+Description=VPN admin: the bot and the page
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bvpn-admin
+Group=bvpn-admin
+EnvironmentFile=/etc/bvpn-admin/env
+Environment=PYTHONPATH=/opt/bvpn-admin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/bvpn-admin/venv/bin/python -m admin run
+Restart=always
+RestartSec=10
+MemoryMax=300M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/bvpn-admin /var/lib/bvpn-outbox /var/lib/bvpn-proposals /var/lib/bvpn-kits
+ReadOnlyPaths=-/var/lib/bvpn
+
+[Install]
+WantedBy=multi-user.target

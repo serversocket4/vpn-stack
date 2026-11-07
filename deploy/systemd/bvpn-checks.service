@@ -1,0 +1,6 @@
+[Unit]
+Description=Phone check results -> боте (vpnjob phone-checks), the folder ends empty
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/bvpn/vpnjob.py phone-checks

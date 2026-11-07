@@ -1,0 +1,159 @@
+/* Дизайн-система — Color tokens.
+   Dark-first. Every value below is contrast-verified against WCAG 2.2 AA
+   (1.4.3 text 4.5:1 / large 3:1; 1.4.11 non-text 3:1). Ratios noted inline. */
+:root{
+  /* ================= Brand core (brandbook) ================= */
+  --dk-aqua:#8FB8FA;            /* @kind color */ /* Нео-Аква — 8.47:1 on graphite (AAA) */
+  --dk-graphite:#0B2348;        /* @kind color */ /* Графит */
+  --dk-albedo:#F5F6F7;          /* @kind color */ /* Альбедо — 17.31:1 on graphite */
+
+  /* ================= Accent scale — 7 steps ================= */
+  /* Contrast on --bg-page (#0E2A55):                                     */
+  --dk-aqua-050:#EDF4FE; /* @kind color */ /* 17.53:1 — text on aqua fills */
+  --dk-aqua-100:#D3E4FD; /* @kind color */
+  --dk-aqua-200:#C4DCFD; /* @kind color */
+  --dk-aqua-300:#C4DCFD; /* @kind color */ /* 12.06:1 — focus ring, glow */
+  --dk-aqua-400:#A9CBFC; /* @kind color */ /* 10.15:1 — hover */
+  --dk-aqua-500:#8FB8FA; /* @kind color */ /*  8.53:1 — DEFAULT accent */
+  --dk-aqua-600:#6FA3F7; /* @kind color */ /*  6.08:1 — pressed */
+  --dk-aqua-700:#3F6FB8; /* @kind color */ /*  3.90:1 — NON-TEXT ONLY */
+  --dk-aqua-800:#2A4F86; /* @kind color */ /* decorative / dividers only */
+
+  /* ================= Graphite ramp — surface levels ================= */
+  --dk-graphite-950:#0B2348; /* @kind color */
+  --dk-graphite-900:#0E2A55; /* @kind color */
+  --dk-graphite-850:#123262; /* @kind color */
+  --dk-graphite-800:#183C72; /* @kind color */
+  --dk-graphite-700:#1E4379; /* @kind color */
+  --dk-graphite-650:#2A4F86; /* @kind color */
+  --dk-graphite-600:#2F5590; /* @kind color */
+  --dk-graphite-500:#3B639C; /* @kind color */
+  --dk-graphite-400:#5078AE; /* @kind color */
+  --dk-graphite-300:#7A9AC6; /* @kind color */ /* 3.42:1 on page — min interactive border */
+
+  /* ================= Albedo ramp ================= */
+  --dk-albedo-100:#F5F6F7; /* @kind color */
+  --dk-albedo-200:#E4E6E9; /* @kind color */
+  --dk-albedo-300:#C6CACF; /* @kind color */
+
+  /* ================= Warm secondary accent ================= */
+  --dk-gold:#E6C08C;     /* @kind color */ /* 10.96:1 on graphite */
+  --dk-gold-dim:#C7A472; /* @kind color */
+
+  /* ================= Semantic hues =================
+     Chosen away from the aqua hue (180°) so status never reads as "brand accent".
+     success 155° · warning 40° · error 6° · info 212°. All ≥6:1 on card. */
+  --dk-success:#3ED598;       /* @kind color */ /* 10.04:1 page / 9.05:1 card */
+  --dk-success-dim:#1FA372;   /* @kind color */
+  --dk-success-bg:rgba(62,213,152,0.12);  /* @kind color */
+  --dk-warning:#F5B544;       /* @kind color */ /* 10.40:1 page / 9.37:1 card */
+  --dk-warning-dim:#C2892A;   /* @kind color */
+  --dk-warning-bg:rgba(245,181,68,0.12);  /* @kind color */
+  --dk-error:#FF6B5A;         /* @kind color */ /*  6.74:1 page / 6.07:1 card */
+  --dk-error-dim:#C74334;     /* @kind color */
+  --dk-error-bg:rgba(255,107,90,0.12);    /* @kind color */
+  --dk-info:#5AA9FF;          /* @kind color */ /*  7.68:1 page / 6.92:1 card */
+  --dk-info-dim:#2E7BD1;      /* @kind color */
+  --dk-info-bg:rgba(90,169,255,0.12);     /* @kind color */
+
+  /* ================= Alpha whites ================= */
+  --dk-white-92:rgba(245,246,247,0.92); /* @kind color */
+  --dk-white-70:rgba(245,246,247,0.70); /* @kind color */
+  --dk-white-55:rgba(245,246,247,0.55); /* @kind color */
+  --dk-white-45:rgba(245,246,247,0.45); /* @kind color */
+  --dk-white-12:rgba(245,246,247,0.12); /* @kind color */
+  --dk-white-08:rgba(245,246,247,0.08); /* @kind color */
+  --dk-white-04:rgba(245,246,247,0.04); /* @kind color */
+
+  /* ================= Signature gradients ================= */
+  --dk-metal:linear-gradient(180deg,#FFFFFF 0%,#EDEFF1 34%,#AEB4BC 62%,#F4F6F8 100%); /* @kind color */
+  --dk-aqua-glow:radial-gradient(60% 80% at 50% 100%,rgba(143,184,250,0.28) 0%,rgba(143,184,250,0) 70%); /* @kind color */
+  --dk-aqua-fill:linear-gradient(180deg,#12D6D6 0%,#8FB8FA 100%); /* @kind color */
+
+  /* ============================================================
+     SEMANTIC ALIASES — use these in components, not the ramps.
+     ============================================================ */
+
+  /* --- Surface levels (page → card → raised → modal) --- */
+  --surface-page:var(--dk-graphite-900);       /* @kind color */
+  --surface-page-deep:var(--dk-graphite-950);  /* @kind color */
+  --surface-sunken:var(--dk-graphite-950);     /* @kind color */
+  --surface-card:var(--dk-graphite-800);       /* @kind color */
+  --surface-card-raised:var(--dk-graphite-700);/* @kind color */
+  --surface-modal:var(--dk-graphite-650);      /* @kind color */
+  --surface-overlay:rgba(10,10,11,0.72);       /* @kind color */
+  --surface-inset:var(--dk-graphite-850);      /* @kind color */
+  --surface-light:var(--dk-albedo-100);        /* @kind color */
+  /* legacy alias */
+  --bg-page:var(--surface-page);               /* @kind color */
+  --bg-page-deep:var(--surface-page-deep);     /* @kind color */
+  --surface-card-light:var(--surface-light);   /* @kind color */
+
+  /* --- Text levels --- */
+  --text-primary:var(--dk-albedo-100);   /* @kind color */ /* 17.31:1 */
+  --text-secondary:var(--dk-white-70);   /* @kind color */ /*  8.81:1 */
+  --text-tertiary:var(--dk-white-55);    /* @kind color */ /*  5.82:1 — AA floor */
+  --text-disabled:var(--dk-white-45);    /* @kind color */ /*  4.28:1 — WCAG-exempt */
+  --text-accent:var(--dk-aqua-500);      /* @kind color */ /*  8.53:1 */
+  --text-gold:var(--dk-gold);            /* @kind color */
+  --text-on-accent:var(--dk-graphite-950);/* @kind color */ /* 8.47:1 — NEVER white on aqua (2.04:1) */
+  --text-on-light:var(--dk-graphite-900); /* @kind color */
+  --text-on-light-muted:rgba(18,18,18,0.62); /* @kind color */
+  /* legacy aliases */
+  --text-muted:var(--text-tertiary);     /* @kind color */
+  --text-faint:var(--dk-white-45);       /* @kind color */ /* decorative only */
+
+  /* --- Borders & dividers --- */
+  --border-subtle:var(--dk-white-08);          /* @kind color */ /* decorative separation */
+  --border-default:var(--dk-white-12);         /* @kind color */ /* decorative separation */
+  --border-strong:var(--dk-graphite-600);      /* @kind color */
+  --border-interactive:var(--dk-graphite-300); /* @kind color */ /* 3.42:1 — control outlines (1.4.11) */
+  --border-accent:var(--dk-aqua-500);          /* @kind color */
+  --divider:var(--dk-white-08);                /* @kind color */
+
+  /* --- Interactive states --- */
+  --accent:var(--dk-aqua-500);            /* @kind color */
+  --accent-hover:var(--dk-aqua-400);      /* @kind color */
+  --accent-pressed:var(--dk-aqua-600);    /* @kind color */
+  --accent-subtle:rgba(143,184,250,0.12);   /* @kind color */
+  --accent-contrast:var(--text-on-accent);/* @kind color */
+  --accent-disabled:var(--dk-graphite-500);/* @kind color */
+  --focus-ring:var(--dk-aqua-300);        /* @kind color */ /* 12.06:1 */
+
+  /* --- Status roles --- */
+  --status-success:var(--dk-success);     /* @kind color */
+  --status-warning:var(--dk-warning);     /* @kind color */
+  --status-error:var(--dk-error);         /* @kind color */
+  --status-info:var(--dk-info);           /* @kind color */
+
+  /* ================= Light-theme inks =================
+     Аква и статусы на альбедо проваливают AA (аква 2.04:1, зелёный ~1.8:1),
+     поэтому в светлой теме текст и рамки статусов — «чернила» того же тона.
+     Контраст: на --dk-albedo-100 / на --dk-paper. */
+  --dk-paper:#FFFFFF;          /* @kind color */ /* плашка светлой темы */
+  --dk-aqua-ink:#007575;       /* @kind color */ /* 5.11:1 / 5.52:1 */
+  --dk-success-ink:#0F7A52;    /* @kind color */ /* 4.94:1 / 5.35:1 */
+  --dk-warning-ink:#8F5E00;    /* @kind color */ /* 5.15:1 / 5.57:1 */
+  --dk-error-ink:#B3392B;      /* @kind color */ /* 5.49:1 / 5.94:1 */
+  --dk-info-ink:#1F5FA8;       /* @kind color */ /* 5.95:1 / 6.44:1 */
+  --dk-gold-ink:#8A6A2E;       /* @kind color */ /* 4.62:1 / 5.00:1 */
+
+  /* --- Theme-dependent aliases ---
+     Значения тёмной темы; светлая переопределяет их в theme-light.css.
+     Компоненты берут эти имена, а не --dk-white-* / --dk-*-bg напрямую:
+     белая полупрозрачная подсветка на белом фоне невидима. */
+  --surface-hover:var(--dk-white-08);          /* @kind color */
+  --surface-tint:var(--dk-white-04);           /* @kind color */
+  --surface-raised-hover:var(--dk-graphite-600);/* @kind color */
+  --status-success-bg:var(--dk-success-bg);    /* @kind color */
+  --status-success-border:var(--dk-success-dim);/* @kind color */
+  --status-warning-bg:var(--dk-warning-bg);    /* @kind color */
+  --status-warning-border:var(--dk-warning-dim);/* @kind color */
+  --status-error-bg:var(--dk-error-bg);        /* @kind color */
+  --status-error-border:var(--dk-error-dim);   /* @kind color */
+  --status-info-bg:var(--dk-info-bg);          /* @kind color */
+  --status-info-border:var(--dk-info-dim);     /* @kind color */
+  --scene-glow:var(--dk-aqua-glow);            /* @kind color */ /* свет сцены снизу */
+  --wordmark-fill:var(--dk-metal);             /* @kind color */ /* металлик — только на тёмном */
+  --text-on-status:var(--dk-graphite-950);     /* @kind color */ /* текст на СПЛОШНОЙ заливке статуса */
+}

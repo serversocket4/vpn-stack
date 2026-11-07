@@ -1,0 +1,33 @@
+{
+  "Name": "VPN Stack - AI and social",
+  "GlobalProxy": "false",
+  "RemoteDNSType": "DoU",
+  "RemoteDNSDomain": "",
+  "RemoteDNSIP": "1.1.1.1",
+  "DomesticDNSType": "DoU",
+  "DomesticDNSDomain": "",
+  "DomesticDNSIP": "77.88.8.8",
+  "Geoipurl": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat",
+  "Geositeurl": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat",
+  "DirectSites": [],
+  "DirectIp": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"],
+  "ProxySites": [
+    "domain:openai.com", "domain:chatgpt.com", "domain:oaistatic.com", "domain:oaiusercontent.com",
+    "domain:anthropic.com", "domain:claude.ai", "domain:perplexity.ai", "domain:gemini.google.com",
+    "domain:discord.com", "domain:discord.gg", "domain:discordapp.com", "domain:discordapp.net",
+    "domain:discord.media", "domain:discordcdn.com", "domain:discordstatus.com",
+    "domain:supercell.com", "domain:supercell.net", "domain:supercellid.com", "domain:supercellstore.com",
+    "domain:clashroyale.com", "domain:clashofclans.com", "domain:brawlstars.com", "domain:haydaygame.com",
+    "domain:boombeach.com", "domain:squadbusters.com",
+    "domain:telegram.org", "domain:t.me", "domain:telegra.ph",
+    "domain:youtube.com", "domain:youtu.be", "domain:googlevideo.com", "domain:ytimg.com",
+    "domain:instagram.com", "domain:cdninstagram.com", "domain:facebook.com", "domain:fbcdn.net",
+    "domain:twitter.com", "domain:x.com", "domain:twimg.com", "domain:tiktok.com", "domain:tiktokcdn.com"
+  ],
+  "ProxyIp": [],
+  "BlockSites": [],
+  "BlockIp": [],
+  "DnsHosts": {},
+  "DomainStrategy": "IPIfNonMatch",
+  "FakeDNS": "false"
+}

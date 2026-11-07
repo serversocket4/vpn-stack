@@ -1,0 +1,8 @@
+// admin may only start a VPN panel job; what the job does is decided by root (vpnjob, digest)
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" && subject.user == "bvpn-admin"
+        && action.lookup("verb") == "start"
+        && /^bvpn-job@[a-z0-9-]{3,40}\.service$/.test(action.lookup("unit"))) {
+        return polkit.Result.YES;
+    }
+});

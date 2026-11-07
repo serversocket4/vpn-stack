@@ -1,0 +1,11 @@
+{
+  "ip": "203.0.113.10",
+  "relay_ip": "198.51.100.20",
+  "brand": "VPN Stack",
+  "owner_email": "admin@example.com",
+  "bot_token": "REPLACE_WITH_YOUR_BOT_TOKEN",
+  "chat_id": 0,
+  "reality_server_name": "www.microsoft.com",
+  "telegram_tls_domain": "www.microsoft.com",
+  "relay_xhttp_port": 18443
+}

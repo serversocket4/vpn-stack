@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Caddy's certificate of the server's IP -> /usr/local/etc/xray/tls for Xray (Caddy's files are caddy 600). The
+# VLESS+TLS inbound (2083, fp ios) uses it. Let's Encrypt gives an IP a 6-day certificate and Caddy renews it about
+# every 3 days; Xray restarts only when it changed, so the timer runs at night (4:00 MSK).
+set -euo pipefail
+IP="$(sed -n 's/^IP=//p' /etc/bvpn/server)"
+BASE=/var/lib/caddy/.local/share/caddy/certificates
+SRC="$(find "$BASE" -type d -name "$IP" 2>/dev/null | head -1 || true)"
+DST=/usr/local/etc/xray/tls
+CONF=/usr/local/etc/xray/config.json
+[ -n "$SRC" ] && [ -s "$SRC/$IP.crt" ] && [ -s "$SRC/$IP.key" ] || { echo "tls-sync: no certificate from Caddy yet"; exit 0; }
+GROUP="$(stat -c %G "$CONF")"
+install -d -m 750 -o root -g "$GROUP" "$DST"
+changed=no
+for x in crt key; do
+    cmp -s "$SRC/$IP.$x" "$DST/sub.$x" || { install -m 640 -o root -g "$GROUP" "$SRC/$IP.$x" "$DST/sub.$x"; changed=yes; }
+done
+if [ "$changed" = yes ] && [ "${1:-}" != --no-restart ] && grep -q "$DST/sub.crt" "$CONF"; then
+    xray run -test -config "$CONF" >/dev/null && systemctl restart xray && echo "tls-sync: xray restarted"
+fi
+echo "tls-sync: changed=$changed"

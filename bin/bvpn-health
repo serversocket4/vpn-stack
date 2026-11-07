@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Self-check of the VPN server, every 10 minutes. /var/lib/bvpn-health/status: "OK <time>" or "PROBLEM <time>", then one
+# problem per line, no secrets. When the list of problems changes - one message to the bot. Restarts nothing: systemd does.
+set -uo pipefail
+DIR=/var/lib/bvpn-health; STATUS="$DIR/status"; LAST="$DIR/last-problems"
+install -d -m 755 "$DIR"
+exec 9>"$DIR/.lock"; flock -n 9 || exit 0
+TMP="$(mktemp "$DIR/.status.XXXXXX")"
+problems=(); add() { problems+=("$1"); }
+for u in xray hysteria-server telemt caddy bvpn-admin bvpn-sub fail2ban ufw ssh unattended-upgrades; do
+    [ "$(systemctl is-active "$u" 2>/dev/null)" = active ] || add "служба $u не работает ($(systemctl is-active "$u" 2>/dev/null))"
+done
+while read -r u _; do
+    [ -n "$u" ] && add "systemd: $u в состоянии failed"
+done < <(systemctl list-units --state=failed --no-legend --plain 2>/dev/null)
+tcp="$(ss -lnt)"; udp="$(ss -lnu)"
+grep -qE '[:.]2083\s' <<< "$tcp" || add "никто не слушает 2083/tcp (Запасной 1)"
+grep -qE '[:.]8443\s' <<< "$tcp" || add "никто не слушает 8443/tcp (Запасной 3)"
+grep -qE '[:.]8880\s' <<< "$tcp" || add "никто не слушает 8880/tcp (прокси Telegram)"
+grep -qE '[:.]443\s' <<< "$udp" || add "никто не слушает 443/udp (Основной)"
+grep -qE '[:.]443\s' <<< "$tcp" || add "никто не слушает 443/tcp (страницы подписок)"
+IP="$(sed -n 's/^IP=//p' /etc/bvpn/server)"
+# the certificate lives 6 days and Caddy renews it after about 3: under a day left means renewal is failing
+end="$(echo | timeout 10 openssl s_client -connect "$IP:443" -servername "$IP" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)"
+if [ -z "$end" ]; then add "страницы подписок не отдают сертификат"
+elif [ "$(( $(date -d "$end" +%s) - $(date +%s) ))" -lt 86400 ]; then add "сертификат страниц истекает меньше чем через сутки"; fi
+crt=/usr/local/etc/xray/tls/sub.crt
+[ "$(( $(date -d "$(openssl x509 -noout -enddate -in "$crt" 2>/dev/null | cut -d= -f2)" +%s 2>/dev/null || echo 0) - $(date +%s) ))" -ge 43200 ] \
+    || add "сертификат Запасного 1 истекает меньше чем через 12 часов"
+xray run -test -config /usr/local/etc/xray/config.json >/dev/null 2>&1 || add "конфиг Xray не проходит проверку"
+disk="$(df --output=pcent / | tail -1 | tr -dc 0-9)"; [ "$disk" -lt 85 ] || add "диск заполнен на ${disk}%"
+mem="$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)"; [ "$mem" -ge 200 ] || add "свободной памяти ${mem} МБ"
+if [ -e /var/run/reboot-required ] && [ -n "$(find /var/run/reboot-required -mmin +4320 2>/dev/null)" ]; then
+    add "ждёт перезагрузки больше 3 дней (обновления ядра)"
+fi
+now="$(date -u '+%F %H:%M UTC')"
+if [ ${#problems[@]} -eq 0 ]; then printf 'OK %s\n' "$now" > "$TMP"; current=""
+else { printf 'PROBLEM %s\n' "$now"; printf '%s\n' "${problems[@]}"; } > "$TMP"
+     current="$(printf '%s\n' "${problems[@]}" | sed -E 's/[0-9]+([.,][0-9]+)?/N/g' | sort)"; fi
+chmod 644 "$TMP"; mv "$TMP" "$STATUS"
+previous="$(cat "$LAST" 2>/dev/null || true)"
+if [ "$current" != "$previous" ]; then
+    if [ -z "$current" ]; then msg="VPN: всё снова в порядке."
+    else msg="VPN, проблемы (${#problems[@]}):"$'\n'"$(printf -- '- %s\n' "${problems[@]}")"; fi
+    if /usr/local/sbin/bvpn-alert --text "${msg:0:3800}" 2>&1; then printf '%s' "$current" > "$LAST"; fi
+fi

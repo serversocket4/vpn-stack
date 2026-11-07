@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# usage: bvpn-alert --text "<msg>"  |  bvpn-alert <unit>   (OnFailure of a job). The token: /etc/bvpn-admin/env (root).
+set -uo pipefail
+ENV_FILE=/etc/bvpn-admin/env
+setting() { grep -m1 "^$1=" "$ENV_FILE" | cut -d= -f2-; }
+if [ "${1:-}" = "--text" ]; then text="${2:-}"
+else text="сбой задания ${1:-unknown} ($(systemctl show "${1:-x}" -p Result --value 2>/dev/null))"; fi
+token="$(setting TELEGRAM_BOT_TOKEN)"; chat="$(setting TELEGRAM_CHAT_ID)"
+[ -n "$token" ] && [ -n "$chat" ] || { echo "alert NOT sent: no token in $ENV_FILE" >&2; exit 1; }
+printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" | curl -s -o /dev/null --fail --max-time 20 -K - \
+    --data-urlencode "chat_id=${chat}" --data-urlencode "text=${text}" \
+    || { echo "alert NOT delivered to Telegram" >&2; exit 1; }

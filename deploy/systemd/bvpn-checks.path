@@ -1,0 +1,8 @@
+[Unit]
+Description=Phone check results (vpnsub <token>/check) waiting to go to the bot
+
+[Path]
+DirectoryNotEmpty=/var/lib/bvpn-checks
+
+[Install]
+WantedBy=paths.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=VPN server self-check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/bvpn-health

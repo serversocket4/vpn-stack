@@ -1,0 +1,146 @@
+/* Светлая тема с мягким фоном и семантическими цветами.
+   Она переопределяет семантические алиасы, сохраняя базовые шкалы цветов.
+   Компоненты используют --surface-hover, --status-*-bg, --scene-glow
+   и --wordmark-fill для переключения между темами.
+   Включение: prefers-color-scheme или ручной data-theme="light" | "dark"
+   на <html>; ручной выбор имеет приоритет. */
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Поверхности: альбедо-страница, белая плашка, шаг «темнее» вместо «светлее». */
+  --surface-page:#E6E8EB;
+  --surface-page-deep:#DCDFE3;
+  --surface-sunken:#DCDFE3;
+  --surface-card:#F1F2F4;
+  --surface-card-raised:#DCDFE3;
+  --surface-modal:#F4F5F7;
+  --surface-overlay:rgba(17,17,19,0.40);
+  --surface-inset:#EBEDF0;
+  --surface-hover:rgba(32,33,36,0.06);
+  --surface-tint:rgba(32,33,36,0.035);
+  --surface-raised-hover:#D0D4D9;
+
+  /* Текст — графит. Контраст на странице / плашке. */
+  --text-primary:#202124;              /* 13.11:1 стр. / 14.37:1 плашка */
+  --text-secondary:rgba(32,33,36,0.74); /*  6.09:1 / 6.45:1 */
+  --text-tertiary:rgba(32,33,36,0.68);  /*  ≥4.7:1 на странице и плашке */
+  --text-disabled:rgba(32,33,36,0.45);  /* WCAG-exempt */
+  --text-accent:#0B2348;               /*  5.02:1 / 5.50:1 */
+  --text-gold:#7C5F28;                 /*  4.85:1 / 5.32:1 */
+  --text-muted:var(--text-tertiary);
+  --text-faint:rgba(32,33,36,0.45);
+
+  --border-subtle:rgba(32,33,36,0.07);
+  --border-default:rgba(32,33,36,0.11);
+  --border-strong:#C9CDD3;
+  --border-interactive:var(--dk-graphite-300); /* 4.87:1 — контролы (1.4.11) */
+  --border-accent:#0B2348;
+  --divider:rgba(32,33,36,0.07);
+
+  /* Заливка основной кнопки остаётся аквой с графитовым текстом (8.53:1). */
+  --accent-subtle:rgba(11,35,72,0.12);
+  --accent-disabled:var(--dk-albedo-300);
+  --focus-ring:#0B2348;
+
+  --status-success:#0D6E4A;
+  --status-warning:#835500;
+  --status-error:#A8352A;
+  --status-info:var(--dk-info-ink);
+  /* Сплошная заливка чернилами — текст белый: на #B3392B белый 5.94:1, графит 3.2:1. */
+  --text-on-status:var(--dk-paper);
+  /* Текст статуса на своей подложке: 4.67–5.10:1. */
+  --status-success-bg:rgba(15,122,82,0.10);
+  --status-success-border:#0D6E4A;
+  --status-warning-bg:rgba(143,94,0,0.10);
+  --status-warning-border:#835500;
+  --status-error-bg:rgba(179,57,43,0.10);
+  --status-error-border:#A8352A;
+  --status-info-bg:rgba(31,95,168,0.10);
+  --status-info-border:var(--dk-info-ink);
+
+  /* Аква-дымка на белом читается грязью — свет сцены и сигнала слабее.
+     Металлик бело-серебряный и на светлом пропадает — знак сплошным графитом. */
+  --scene-glow:radial-gradient(60% 80% at 50% 100%,rgba(11,35,72,0.10) 0%,rgba(11,35,72,0) 70%);
+  --wordmark-fill:linear-gradient(#202124,#202124);
+  --glow-aqua-sm:0 0 12px rgba(11,35,72,0.30);
+  --glow-aqua:0 0 24px rgba(11,35,72,0.30);
+  --glow-aqua-strong:0 0 40px rgba(11,35,72,0.35);
+
+  --shadow-sm:0 1px 2px rgba(17,17,19,0.08);
+  --shadow-md:0 8px 24px rgba(17,17,19,0.10);
+  --shadow-lg:0 24px 60px rgba(17,17,19,0.14);
+  --shadow-modal:0 32px 80px rgba(17,17,19,0.20);
+  --inner-hairline:inset 0 0 0 1px rgba(17,17,19,0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    /* Поверхности: альбедо-страница, белая плашка, шаг «темнее» вместо «светлее». */
+    --surface-page:#E6E8EB;
+    --surface-page-deep:#DCDFE3;
+    --surface-sunken:#DCDFE3;
+    --surface-card:#F1F2F4;
+    --surface-card-raised:#DCDFE3;
+    --surface-modal:#F4F5F7;
+    --surface-overlay:rgba(17,17,19,0.40);
+    --surface-inset:#EBEDF0;
+    --surface-hover:rgba(32,33,36,0.06);
+    --surface-tint:rgba(32,33,36,0.035);
+    --surface-raised-hover:#D0D4D9;
+
+    /* Текст — графит. Контраст на странице / плашке. */
+    --text-primary:#202124;              /* 13.11:1 стр. / 14.37:1 плашка */
+    --text-secondary:rgba(32,33,36,0.74); /*  6.09:1 / 6.45:1 */
+    --text-tertiary:rgba(32,33,36,0.68);  /*  ≥4.7:1 на странице и плашке */
+    --text-disabled:rgba(32,33,36,0.45);  /* WCAG-exempt */
+    --text-accent:#0B2348;               /*  5.02:1 / 5.50:1 */
+    --text-gold:#7C5F28;                 /*  4.85:1 / 5.32:1 */
+    --text-muted:var(--text-tertiary);
+    --text-faint:rgba(32,33,36,0.45);
+
+    --border-subtle:rgba(32,33,36,0.07);
+    --border-default:rgba(32,33,36,0.11);
+    --border-strong:#C9CDD3;
+    --border-interactive:var(--dk-graphite-300); /* 4.87:1 — контролы (1.4.11) */
+    --border-accent:#0B2348;
+    --divider:rgba(32,33,36,0.07);
+
+    /* Заливка основной кнопки остаётся аквой с графитовым текстом (8.53:1). */
+    --accent-subtle:rgba(11,35,72,0.12);
+    --accent-disabled:var(--dk-albedo-300);
+    --focus-ring:#0B2348;
+
+    --status-success:#0D6E4A;
+    --status-warning:#835500;
+    --status-error:#A8352A;
+    --status-info:var(--dk-info-ink);
+    /* Сплошная заливка чернилами — текст белый: на #B3392B белый 5.94:1, графит 3.2:1. */
+    --text-on-status:var(--dk-paper);
+    /* Текст статуса на своей подложке: 4.67–5.10:1. */
+    --status-success-bg:rgba(15,122,82,0.10);
+    --status-success-border:#0D6E4A;
+    --status-warning-bg:rgba(143,94,0,0.10);
+    --status-warning-border:#835500;
+    --status-error-bg:rgba(179,57,43,0.10);
+    --status-error-border:#A8352A;
+    --status-info-bg:rgba(31,95,168,0.10);
+    --status-info-border:var(--dk-info-ink);
+
+    /* Аква-дымка на белом читается грязью — свет сцены и сигнала слабее.
+       Металлик бело-серебряный и на светлом пропадает — знак сплошным графитом. */
+    --scene-glow:radial-gradient(60% 80% at 50% 100%,rgba(11,35,72,0.10) 0%,rgba(11,35,72,0) 70%);
+    --wordmark-fill:linear-gradient(#202124,#202124);
+    --glow-aqua-sm:0 0 12px rgba(11,35,72,0.30);
+    --glow-aqua:0 0 24px rgba(11,35,72,0.30);
+    --glow-aqua-strong:0 0 40px rgba(11,35,72,0.35);
+
+    --shadow-sm:0 1px 2px rgba(17,17,19,0.08);
+    --shadow-md:0 8px 24px rgba(17,17,19,0.10);
+    --shadow-lg:0 24px 60px rgba(17,17,19,0.14);
+    --shadow-modal:0 32px 80px rgba(17,17,19,0.20);
+    --inner-hairline:inset 0 0 0 1px rgba(17,17,19,0.08);
+  }
+}

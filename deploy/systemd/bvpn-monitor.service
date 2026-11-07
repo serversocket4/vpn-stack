@@ -1,0 +1,21 @@
+[Unit]
+Description=VPN dashboard read-only host and tunnel probes
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Environment=BVPN_MONITOR_ACCOUNT=monitoring
+ExecStart=/usr/bin/python3 -I /usr/local/lib/bvpn/monitor_collect.py --once
+TimeoutStartSec=55
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=3
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+
